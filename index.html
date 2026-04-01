@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InFlow</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232734;
+    --border: #2e3348;
+    --text: #e2e4ed;
+    --text-dim: #8b8fa3;
+    --accent: #6c72ff;
+    --accent-hover: #8186ff;
+    --accent-bg: rgba(108,114,255,0.1);
+    --danger: #ff5c5c;
+    --success: #3dd68c;
+    --warn: #fbbf24;
+    --radius: 8px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 100;
+  }
+  .logo { display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; letter-spacing:-.3px; }
+  .logo svg { width:22px; height:22px; }
+  .header-actions { display:flex; gap:8px; }
+
+  /* ── Buttons ── */
+  .btn {
+    display:inline-flex; align-items:center; gap:6px;
+    padding: 7px 14px; border-radius:var(--radius);
+    font-size:13px; font-weight:500; cursor:pointer;
+    border:1px solid var(--border); background:var(--surface2);
+    color:var(--text); transition: all .15s;
+  }
+  .btn:hover { background:var(--border); }
+  .btn-primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn-primary:hover { background:var(--accent-hover); }
+  .btn svg { width:15px; height:15px; }
+  .btn-sm { padding:5px 10px; font-size:12px; }
+  .btn-icon { padding:7px; }
+
+  /* ── Layout ── */
+  .main { display:flex; flex:1; overflow:hidden; }
+
+  /* ── Left: Code Editor ── */
+  .editor-panel {
+    width: 380px; min-width:280px; max-width:600px;
+    display:flex; flex-direction:column;
+    border-right:1px solid var(--border);
+    background: var(--surface);
+    flex-shrink:0;
+    position: relative;
+  }
+  .panel-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 10px 14px; border-bottom:1px solid var(--border);
+    font-size:12px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.5px; color:var(--text-dim);
+  }
+  .editor-wrap { flex:1; position:relative; overflow:hidden; }
+  #codeEditor {
+    width:100%; height:100%; resize:none;
+    background:transparent; color:#c5c8d6;
+    border:none; outline:none;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size:13px; line-height:1.7;
+    padding:14px 16px;
+    tab-size:2;
+  }
+  #codeEditor::placeholder { color: var(--text-dim); }
+
+  /* ── Resize handle ── */
+  .resize-handle {
+    width:4px; cursor:col-resize; background:transparent;
+    position:absolute; right:0; top:0; bottom:0; z-index:10;
+    transition: background .15s;
+  }
+  .resize-handle:hover, .resize-handle.active { background: var(--accent); }
+
+  /* ── Center: Preview ── */
+  .preview-panel {
+    flex:1; display:flex; flex-direction:column;
+    overflow:hidden; background: var(--bg);
+    position: relative;
+  }
+  .preview-toolbar {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 14px; border-bottom:1px solid var(--border);
+    background:var(--surface); gap:8px;
+  }
+  .zoom-controls { display:flex; align-items:center; gap:4px; }
+  .zoom-label { font-size:12px; color:var(--text-dim); min-width:44px; text-align:center; }
+  .preview-container {
+    flex:1; overflow:auto; display:flex;
+    align-items:center; justify-content:center;
+    padding:40px;
+    position: relative;
+  }
+  #mermaidPreview {
+    transform-origin: center center;
+    transition: transform .2s ease;
+    cursor: grab;
+  }
+  #mermaidPreview:active { cursor: grabbing; }
+  #mermaidPreview svg { max-width: none !important; }
+  .preview-error {
+    display:none; position:absolute; bottom:16px; left:16px; right:16px;
+    background: rgba(255,92,92,0.1); border:1px solid var(--danger);
+    border-radius:var(--radius); padding:10px 14px;
+    font-size:12px; color:var(--danger);
+    max-height:100px; overflow-y:auto;
+  }
+  .preview-error.show { display:block; }
+
+  /* ── Right: Properties ── */
+  .props-panel {
+    width:300px; min-width:240px;
+    display:flex; flex-direction:column;
+    border-left:1px solid var(--border);
+    background:var(--surface);
+    overflow-y:auto;
+    flex-shrink:0;
+  }
+  .props-section { padding:14px; border-bottom:1px solid var(--border); }
+  .props-section h3 {
+    font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.5px; color:var(--text-dim); margin-bottom:10px;
+  }
+
+  .prop-row {
+    display:flex; align-items:center; gap:8px;
+    margin-bottom:8px;
+  }
+  .prop-row label {
+    font-size:12px; color:var(--text-dim);
+    min-width:70px; flex-shrink:0;
+  }
+  .prop-row input[type="text"],
+  .prop-row input[type="number"],
+  .prop-row select {
+    flex:1; padding:6px 10px; border-radius:6px;
+    border:1px solid var(--border); background:var(--surface2);
+    color:var(--text); font-size:12px; outline:none;
+    transition: border-color .15s;
+  }
+  .prop-row input:focus, .prop-row select:focus {
+    border-color:var(--accent);
+  }
+  .prop-row input[type="color"] {
+    width:32px; height:28px; border:1px solid var(--border);
+    border-radius:6px; cursor:pointer; background:var(--surface2);
+    padding:2px;
+  }
+  .color-swatch-row {
+    display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;
+  }
+  .color-swatch {
+    width:24px; height:24px; border-radius:6px; cursor:pointer;
+    border:2px solid transparent; transition: all .15s;
+  }
+  .color-swatch:hover, .color-swatch.active { border-color:var(--text); transform:scale(1.15); }
+
+  /* ── Node list ── */
+  .node-list { display:flex; flex-direction:column; gap:4px; }
+  .node-item {
+    display:flex; align-items:center; gap:8px;
+    padding:8px 10px; border-radius:6px;
+    cursor:pointer; transition: background .15s;
+    font-size:13px;
+  }
+  .node-item:hover { background:var(--surface2); }
+  .node-item.selected { background:var(--accent-bg); border:1px solid rgba(108,114,255,0.3); }
+  .node-dot {
+    width:10px; height:10px; border-radius:50%;
+    flex-shrink:0;
+  }
+  .node-id { color:var(--text-dim); font-size:11px; font-family:monospace; }
+
+  /* ── Templates ── */
+  .template-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .template-card {
+    padding:10px; border-radius:var(--radius);
+    border:1px solid var(--border); background:var(--surface2);
+    cursor:pointer; font-size:12px; text-align:center;
+    transition: all .15s;
+  }
+  .template-card:hover { border-color:var(--accent); background:var(--accent-bg); }
+  .template-card .template-icon { font-size:20px; margin-bottom:4px; }
+
+  /* ── Export modal ── */
+  .modal-overlay {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,0.6); z-index:1000;
+    align-items:center; justify-content:center;
+    backdrop-filter:blur(4px);
+  }
+  .modal-overlay.show { display:flex; }
+  .modal {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:24px; width:420px;
+    box-shadow:var(--shadow);
+  }
+  .modal h2 { font-size:16px; margin-bottom:16px; }
+  .modal-close {
+    position:absolute; top:16px; right:16px;
+    background:none; border:none; color:var(--text-dim);
+    cursor:pointer; font-size:18px;
+  }
+  .export-options { display:flex; flex-direction:column; gap:10px; }
+  .export-option {
+    display:flex; align-items:center; gap:12px;
+    padding:14px; border-radius:var(--radius);
+    border:1px solid var(--border); background:var(--surface2);
+    cursor:pointer; transition:all .15s;
+  }
+  .export-option:hover { border-color:var(--accent); background:var(--accent-bg); }
+  .export-option .icon { font-size:24px; }
+  .export-option .info h4 { font-size:14px; margin-bottom:2px; }
+  .export-option .info p { font-size:12px; color:var(--text-dim); }
+  .export-scale { margin-top:12px; }
+  .export-scale label { font-size:12px; color:var(--text-dim); display:block; margin-bottom:6px; }
+  .export-scale select {
+    width:100%; padding:8px; border-radius:6px;
+    border:1px solid var(--border); background:var(--surface2);
+    color:var(--text); font-size:13px;
+  }
+
+  /* ── Notification toast ── */
+  .toast {
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:var(--surface2); border:1px solid var(--border);
+    padding:10px 20px; border-radius:var(--radius);
+    font-size:13px; z-index:2000;
+    opacity:0; transition:opacity .3s;
+    pointer-events:none;
+  }
+  .toast.show { opacity:1; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  ::-webkit-scrollbar-thumb:hover { background:var(--text-dim); }
+
+  /* ── Tabs ── */
+  .tab-bar { display:flex; border-bottom:1px solid var(--border); }
+  .tab {
+    padding:8px 14px; font-size:12px; font-weight:500;
+    cursor:pointer; border-bottom:2px solid transparent;
+    color:var(--text-dim); transition:all .15s;
+  }
+  .tab:hover { color:var(--text); }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+
+  /* ── Theme selector (diagram) ── */
+  .theme-chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .theme-chip {
+    padding:4px 10px; border-radius:20px; font-size:11px;
+    border:1px solid var(--border); cursor:pointer;
+    background:var(--surface2); color:var(--text-dim);
+    transition: all .15s;
+  }
+  .theme-chip:hover { border-color:var(--text-dim); }
+  .theme-chip.active { border-color:var(--accent); color:var(--accent); background:var(--accent-bg); }
+
+  .direction-chips { display:flex; gap:6px; margin-top:6px; }
+  .direction-chip {
+    padding:5px 12px; border-radius:6px; font-size:12px;
+    border:1px solid var(--border); cursor:pointer;
+    background:var(--surface2); color:var(--text-dim);
+    font-family:monospace; transition:all .15s;
+  }
+  .direction-chip:hover { border-color:var(--text-dim); }
+  .direction-chip.active { border-color:var(--accent); color:var(--accent); background:var(--accent-bg); }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    </svg>
+    InFlow
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-sm" onclick="loadTemplate('blank')" title="New">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      New
+    </button>
+    <button class="btn btn-sm btn-primary" onclick="openExportModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export
+    </button>
+  </div>
+</header>
+
+<!-- ── Main Layout ── -->
+<div class="main">
+
+  <!-- Left: Code Editor -->
+  <div class="editor-panel" id="editorPanel">
+    <div class="panel-header">
+      <span>Code Editor</span>
+      <button class="btn btn-sm" onclick="formatCode()" title="Auto-format">Format</button>
+    </div>
+    <div class="editor-wrap">
+      <textarea id="codeEditor" spellcheck="false" placeholder="Enter your Mermaid flowchart code here..."></textarea>
+    </div>
+    <div class="resize-handle" id="resizeHandle"></div>
+  </div>
+
+  <!-- Center: Preview -->
+  <div class="preview-panel">
+    <div class="preview-toolbar">
+      <div class="zoom-controls">
+        <button class="btn btn-sm btn-icon" onclick="zoomOut()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <span class="zoom-label" id="zoomLabel">100%</span>
+        <button class="btn btn-sm btn-icon" onclick="zoomIn()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="btn btn-sm" onclick="resetZoom()">Fit</button>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm" onclick="renderDiagram()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+          Render
+        </button>
+      </div>
+    </div>
+    <div class="preview-container" id="previewContainer">
+      <div id="mermaidPreview"></div>
+    </div>
+    <div class="preview-error" id="previewError"></div>
+  </div>
+
+  <!-- Right: Properties -->
+  <div class="props-panel">
+    <div class="tab-bar">
+      <div class="tab active" data-tab="nodes" onclick="switchTab('nodes')">Nodes</div>
+      <div class="tab" data-tab="style" onclick="switchTab('style')">Style</div>
+      <div class="tab" data-tab="templates" onclick="switchTab('templates')">Templates</div>
+    </div>
+
+    <!-- Nodes Tab -->
+    <div class="tab-content active" id="tab-nodes">
+      <div class="props-section">
+        <h3>Diagram Nodes</h3>
+        <div class="node-list" id="nodeList">
+          <div style="font-size:12px;color:var(--text-dim);padding:8px 0;">Write Mermaid code to see nodes here</div>
+        </div>
+      </div>
+      <div class="props-section" id="nodePropsSection" style="display:none;">
+        <h3>Edit Node — <span id="editNodeId" style="color:var(--accent);"></span></h3>
+        <div class="prop-row">
+          <label>Label</label>
+          <input type="text" id="nodeLabel" onchange="updateNodeLabel()">
+        </div>
+        <div class="prop-row">
+          <label>Shape</label>
+          <select id="nodeShape" onchange="updateNodeShape()">
+            <option value="rect">Rectangle [ ]</option>
+            <option value="round">Rounded ( )</option>
+            <option value="stadium">Stadium ([ ])</option>
+            <option value="subroutine">Subroutine [[ ]]</option>
+            <option value="cylinder">Cylinder [( )]</option>
+            <option value="circle">Circle (( ))</option>
+            <option value="diamond">Diamond { }</option>
+            <option value="hexagon">Hexagon {{ }}</option>
+            <option value="parallelogram">Parallelogram [/ /]</option>
+            <option value="trapezoid">Trapezoid [/ \]</option>
+            <option value="flag">Flag ></option>
+          </select>
+        </div>
+        <div class="prop-row">
+          <label>Fill</label>
+          <input type="color" id="nodeFill" value="#6c72ff" onchange="updateNodeStyle()">
+          <input type="text" id="nodeFillText" value="#6c72ff" style="width:80px" onchange="syncColorFromText('nodeFill')">
+        </div>
+        <div class="prop-row">
+          <label>Stroke</label>
+          <input type="color" id="nodeStroke" value="#4a4fb3" onchange="updateNodeStyle()">
+          <input type="text" id="nodeStrokeText" value="#4a4fb3" style="width:80px" onchange="syncColorFromText('nodeStroke')">
+        </div>
+        <div class="prop-row">
+          <label>Text Color</label>
+          <input type="color" id="nodeTextColor" value="#ffffff" onchange="updateNodeStyle()">
+          <input type="text" id="nodeTextColorText" value="#ffffff" style="width:80px" onchange="syncColorFromText('nodeTextColor')">
+        </div>
+        <div class="color-swatch-row">
+          <div class="color-swatch" style="background:#6c72ff" onclick="applyPresetColor('#6c72ff','#4a4fb3')"></div>
+          <div class="color-swatch" style="background:#3dd68c" onclick="applyPresetColor('#3dd68c','#2ba86a')"></div>
+          <div class="color-swatch" style="background:#ff5c5c" onclick="applyPresetColor('#ff5c5c','#cc4a4a')"></div>
+          <div class="color-swatch" style="background:#fbbf24" onclick="applyPresetColor('#fbbf24','#d4a01d')"></div>
+          <div class="color-swatch" style="background:#38bdf8" onclick="applyPresetColor('#38bdf8','#2b97c6')"></div>
+          <div class="color-swatch" style="background:#c084fc" onclick="applyPresetColor('#c084fc','#9966cc')"></div>
+          <div class="color-swatch" style="background:#f472b6" onclick="applyPresetColor('#f472b6','#cc5c99')"></div>
+          <div class="color-swatch" style="background:#e2e4ed" onclick="applyPresetColor('#e2e4ed','#b0b3bf')"></div>
+        </div>
+      </div>
+
+      <!-- Connection editing -->
+      <div class="props-section" id="connectionSection" style="display:none;">
+        <h3>Connections</h3>
+        <div id="connectionList"></div>
+      </div>
+    </div>
+
+    <!-- Style Tab -->
+    <div class="tab-content" id="tab-style">
+      <div class="props-section">
+        <h3>Diagram Theme</h3>
+        <div style="margin-bottom:10px;">
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);margin-bottom:5px;">Light</div>
+          <div class="theme-chips">
+            <div class="theme-chip" data-theme="default" onclick="setTheme('default')">Default</div>
+            <div class="theme-chip" data-theme="neutral" onclick="setTheme('neutral')">Neutral</div>
+            <div class="theme-chip" data-theme="ocean" onclick="setTheme('ocean')">Ocean</div>
+            <div class="theme-chip" data-theme="rose" onclick="setTheme('rose')">Rose</div>
+            <div class="theme-chip" data-theme="sage" onclick="setTheme('sage')">Sage</div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);margin-bottom:5px;">Dark</div>
+          <div class="theme-chips">
+            <div class="theme-chip active" data-theme="dark" onclick="setTheme('dark')">Dark</div>
+            <div class="theme-chip" data-theme="forest" onclick="setTheme('forest')">Forest</div>
+            <div class="theme-chip" data-theme="midnight" onclick="setTheme('midnight')">Midnight</div>
+            <div class="theme-chip" data-theme="slate" onclick="setTheme('slate')">Slate</div>
+            <div class="theme-chip" data-theme="mocha" onclick="setTheme('mocha')">Mocha</div>
+          </div>
+        </div>
+      </div>
+      <div class="props-section">
+        <h3>Flow Direction</h3>
+        <div class="direction-chips">
+          <div class="direction-chip active" data-dir="TD" onclick="setDirection('TD')">TD</div>
+          <div class="direction-chip" data-dir="LR" onclick="setDirection('LR')">LR</div>
+          <div class="direction-chip" data-dir="BT" onclick="setDirection('BT')">BT</div>
+          <div class="direction-chip" data-dir="RL" onclick="setDirection('RL')">RL</div>
+        </div>
+      </div>
+      <div class="props-section">
+        <h3>Custom CSS</h3>
+        <textarea id="customCss" style="width:100%;height:100px;resize:vertical;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:monospace;font-size:12px;outline:none;" placeholder="Add custom styles for your diagram SVG..." onchange="renderDiagram()"></textarea>
+      </div>
+    </div>
+
+    <!-- Templates Tab -->
+    <div class="tab-content" id="tab-templates">
+      <div class="props-section">
+        <h3>Quick Start Templates</h3>
+        <div class="template-grid">
+          <div class="template-card" onclick="loadTemplate('simple')">
+            <div class="template-icon">&#9654;</div>
+            Simple Flow
+          </div>
+          <div class="template-card" onclick="loadTemplate('decision')">
+            <div class="template-icon">&#9670;</div>
+            Decision Tree
+          </div>
+          <div class="template-card" onclick="loadTemplate('process')">
+            <div class="template-icon">&#9881;</div>
+            Process Map
+          </div>
+          <div class="template-card" onclick="loadTemplate('cicd')">
+            <div class="template-icon">&#9889;</div>
+            CI/CD Pipeline
+          </div>
+          <div class="template-card" onclick="loadTemplate('userflow')">
+            <div class="template-icon">&#128100;</div>
+            User Flow
+          </div>
+          <div class="template-card" onclick="loadTemplate('architecture')">
+            <div class="template-icon">&#127959;</div>
+            Architecture
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Export Modal ── -->
+<div class="modal-overlay" id="exportModal">
+  <div class="modal">
+    <h2>Export Diagram</h2>
+    <div class="export-scale">
+      <label>Resolution Scale (for PNG &amp; PDF raster)</label>
+      <select id="exportScale">
+        <option value="2">2x — High Quality (default)</option>
+        <option value="3">3x — Very High</option>
+        <option value="4" selected>4x — Print Quality (recommended)</option>
+        <option value="6">6x — Ultra HD / Large Print</option>
+        <option value="8">8x — Maximum</option>
+      </select>
+    </div>
+    <div class="export-options" style="margin-top:16px;">
+      <div class="export-option" onclick="exportAs('svg')">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><text x="12" y="15" text-anchor="middle" font-size="7" fill="var(--accent)" stroke="none" font-weight="bold">SVG</text></svg>
+        </div>
+        <div class="info">
+          <h4>SVG Vector</h4>
+          <p>Scalable vector — perfect for web & print</p>
+        </div>
+      </div>
+      <div class="export-option" onclick="exportAs('png')">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><text x="12" y="15" text-anchor="middle" font-size="7" fill="var(--success)" stroke="none" font-weight="bold">PNG</text></svg>
+        </div>
+        <div class="info">
+          <h4>PNG Image</h4>
+          <p>High-resolution raster image with transparency</p>
+        </div>
+      </div>
+      <div class="export-option" onclick="exportAs('pdf')">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><text x="12" y="15" text-anchor="middle" font-size="7" fill="var(--danger)" stroke="none" font-weight="bold">PDF</text></svg>
+        </div>
+        <div class="info">
+          <h4>PDF Document</h4>
+          <p>Print-ready document format</p>
+        </div>
+      </div>
+    </div>
+    <div style="text-align:right;margin-top:16px;">
+      <button class="btn" onclick="closeExportModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// State
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let currentZoom = 1;
+let panX = 0, panY = 0;
+let currentTheme = 'dark';
+let currentDirection = 'TD';
+let selectedNode = null;
+let nodeStyles = {};       // nodeId -> {fill, stroke, color}
+let renderCounter = 0;
+let debounceTimer = null;
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Init
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+mermaid.initialize({
+  startOnLoad: false,
+  theme: currentTheme,
+  securityLevel: 'loose',
+  flowchart: { curve: 'basis', htmlLabels: true },
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+});
+
+const editor = document.getElementById('codeEditor');
+const preview = document.getElementById('mermaidPreview');
+const errorEl = document.getElementById('previewError');
+
+// Auto-render on typing
+editor.addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(renderDiagram, 500);
+});
+
+// Tab key support in editor
+editor.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    editor.value = editor.value.substring(0, start) + '  ' + editor.value.substring(end);
+    editor.selectionStart = editor.selectionEnd = start + 2;
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Render
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function renderDiagram() {
+  const code = editor.value.trim();
+  if (!code) {
+    preview.innerHTML = '<p style="color:var(--text-dim);font-size:14px;">Enter Mermaid code to see your diagram</p>';
+    errorEl.classList.remove('show');
+    return;
+  }
+
+  // Inject style definitions
+  let finalCode = injectStyles(code);
+
+  const id = 'mermaid-' + (++renderCounter);
+  try {
+    const { svg } = await mermaid.render(id, finalCode);
+    preview.innerHTML = svg;
+    errorEl.classList.remove('show');
+
+    // Apply custom CSS if any
+    const customCss = document.getElementById('customCss').value.trim();
+    if (customCss) {
+      const svgEl = preview.querySelector('svg');
+      if (svgEl) {
+        const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+        styleEl.textContent = customCss;
+        svgEl.insertBefore(styleEl, svgEl.firstChild);
+      }
+    }
+
+    // Apply zoom + pan
+    applyTransform();
+
+    // Parse nodes
+    parseAndListNodes(code);
+
+    // Make SVG nodes clickable
+    makeNodesClickable();
+  } catch (err) {
+    errorEl.textContent = err.message || 'Syntax error in Mermaid code';
+    errorEl.classList.add('show');
+    // Clean up failed render element
+    const failedEl = document.getElementById(id);
+    if (failedEl) failedEl.remove();
+  }
+}
+
+function injectStyles(code) {
+  // Build classDef and style statements from nodeStyles
+  const lines = code.split('\n');
+  // Remove existing style/classDef lines we manage
+  const filtered = lines.filter(l => !l.trim().startsWith('style ') || !l.includes('/*auto*/'));
+  let result = filtered.join('\n');
+
+  // Add style statements
+  for (const [nodeId, styles] of Object.entries(nodeStyles)) {
+    const parts = [];
+    if (styles.fill) parts.push(`fill:${styles.fill}`);
+    if (styles.stroke) parts.push(`stroke:${styles.stroke}`);
+    if (styles.color) parts.push(`color:${styles.color}`);
+    if (parts.length) {
+      result += `\n    style ${nodeId} ${parts.join(',')} /*auto*/`;
+    }
+  }
+  return result;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Parse Nodes
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function parseAndListNodes(code) {
+  const nodes = new Map();
+  const connections = [];
+  const connectionEndpoints = new Set();
+  const skipKeywords = new Set(['graph', 'flowchart', 'TD', 'LR', 'BT', 'RL', 'TB', 'style', 'classDef', 'class', 'subgraph', 'end']);
+  const lines = code.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('%%') || trimmed.startsWith('style ') ||
+        trimmed.startsWith('classDef ') || trimmed.startsWith('class ') ||
+        /^(graph|flowchart)\s/.test(trimmed)) continue;
+
+    // Match node definitions with various shapes
+    const nodePatterns = [
+      /([A-Za-z_][\w]*)\[\[(.+?)\]\]/g,   // subroutine
+      /([A-Za-z_][\w]*)\[\((.+?)\)\]/g,    // cylinder
+      /([A-Za-z_][\w]*)\(\[(.+?)\]\)/g,    // stadium
+      /([A-Za-z_][\w]*)\(\((.+?)\)\)/g,    // circle
+      /([A-Za-z_][\w]*)\{\{(.+?)\}\}/g,    // hexagon
+      /([A-Za-z_][\w]*)\{(.+?)\}/g,        // diamond
+      /([A-Za-z_][\w]*)\[\/(.+?)\\]/g,     // trapezoid
+      /([A-Za-z_][\w]*)\[\/(.+?)\/\]/g,    // parallelogram
+      /([A-Za-z_][\w]*)>(.+?)\]/g,         // flag
+      /([A-Za-z_][\w]*)\((.+?)\)/g,        // rounded
+      /([A-Za-z_][\w]*)\["(.+?)"\]/g,      // rect with quotes
+      /([A-Za-z_][\w]*)\[(.+?)\]/g,        // rect
+    ];
+
+    // Simple connection parsing - collect endpoints
+    const connMatch = trimmed.match(/([A-Za-z_][\w]*)\s*(-->|--[->]|==>|-.->|-.-[->]|~~>|--\s*\|[^|]*\|)\s*([A-Za-z_][\w]*)/);
+    if (connMatch) {
+      connections.push({ from: connMatch[1], to: connMatch[3], type: connMatch[2] });
+      connectionEndpoints.add(connMatch[1]);
+      connectionEndpoints.add(connMatch[3]);
+    }
+
+    for (const pattern of nodePatterns) {
+      let m;
+      while ((m = pattern.exec(trimmed)) !== null) {
+        if (!nodes.has(m[1])) {
+          nodes.set(m[1], { id: m[1], label: m[2].replace(/"/g, '') });
+        }
+      }
+    }
+  }
+
+  // Add connection endpoint IDs not already captured with explicit definitions
+  for (const id of connectionEndpoints) {
+    if (!nodes.has(id) && !skipKeywords.has(id)) {
+      nodes.set(id, { id, label: id });
+    }
+  }
+
+  // Render node list
+  const nodeList = document.getElementById('nodeList');
+  if (nodes.size === 0) {
+    nodeList.innerHTML = '<div style="font-size:12px;color:var(--text-dim);padding:8px 0;">No nodes detected</div>';
+    return;
+  }
+
+  nodeList.innerHTML = '';
+  for (const [id, node] of nodes) {
+    const style = nodeStyles[id] || {};
+    const color = style.fill || '#6c72ff';
+    const el = document.createElement('div');
+    el.className = 'node-item' + (selectedNode === id ? ' selected' : '');
+    el.innerHTML = `<div class="node-dot" style="background:${color}"></div>
+      <span>${node.label}</span>
+      <span class="node-id">${id}</span>`;
+    el.onclick = () => selectNode(id, node.label);
+    nodeList.appendChild(el);
+  }
+
+  // Render connections
+  const connSection = document.getElementById('connectionSection');
+  const connList = document.getElementById('connectionList');
+  if (connections.length > 0) {
+    connSection.style.display = 'block';
+    connList.innerHTML = '';
+    connections.forEach((c, i) => {
+      const row = document.createElement('div');
+      row.className = 'prop-row';
+      row.innerHTML = `<span style="font-size:12px;font-family:monospace;color:var(--text-dim);">${c.from}</span>
+        <select style="width:80px;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:11px;" onchange="updateConnection(${i}, this.value)">
+          <option value="-->" ${c.type.includes('-->') ? 'selected' : ''}>→ Arrow</option>
+          <option value="---" ${c.type === '---' ? 'selected' : ''}>— Line</option>
+          <option value="==>" ${c.type === '==>' ? 'selected' : ''}>⇒ Thick</option>
+          <option value="-.->" ${c.type.includes('-.') ? 'selected' : ''}>⇢ Dotted</option>
+        </select>
+        <span style="font-size:12px;font-family:monospace;color:var(--text-dim);">${c.to}</span>`;
+      connList.appendChild(row);
+    });
+  } else {
+    connSection.style.display = 'none';
+  }
+}
+
+function makeNodesClickable() {
+  const svgNodes = preview.querySelectorAll('.node');
+  svgNodes.forEach(node => {
+    node.style.cursor = 'pointer';
+    node.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = node.id?.replace(/^flowchart-/, '').replace(/-\d+$/, '');
+      if (id) {
+        const label = node.querySelector('.nodeLabel')?.textContent || id;
+        selectNode(id, label);
+      }
+    });
+  });
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Node Editing
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function selectNode(id, label) {
+  selectedNode = id;
+  document.getElementById('nodePropsSection').style.display = 'block';
+  document.getElementById('editNodeId').textContent = id;
+  document.getElementById('nodeLabel').value = label;
+
+  // Detect current shape from code
+  const shape = detectNodeShape(id);
+  document.getElementById('nodeShape').value = shape;
+
+  // Load existing styles
+  const style = nodeStyles[id] || {};
+  setColorInputs('nodeFill', style.fill || '#6c72ff');
+  setColorInputs('nodeStroke', style.stroke || '#4a4fb3');
+  setColorInputs('nodeTextColor', style.color || '#ffffff');
+
+  // Highlight in list
+  document.querySelectorAll('.node-item').forEach(el => el.classList.remove('selected'));
+  const items = document.querySelectorAll('.node-item');
+  items.forEach(el => {
+    if (el.querySelector('.node-id')?.textContent === id) el.classList.add('selected');
+  });
+}
+
+function setColorInputs(baseId, value) {
+  document.getElementById(baseId).value = value;
+  document.getElementById(baseId + 'Text').value = value;
+}
+
+function syncColorFromText(baseId) {
+  const text = document.getElementById(baseId + 'Text').value;
+  if (/^#[0-9a-fA-F]{6}$/.test(text)) {
+    document.getElementById(baseId).value = text;
+    updateNodeStyle();
+  }
+}
+
+function detectNodeShape(id) {
+  const code = editor.value;
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(escaped + '\\[\\[').test(code)) return 'subroutine';
+  if (new RegExp(escaped + '\\[\\(').test(code)) return 'cylinder';
+  if (new RegExp(escaped + '\\(\\[').test(code)) return 'stadium';
+  if (new RegExp(escaped + '\\(\\(').test(code)) return 'circle';
+  if (new RegExp(escaped + '\\{\\{').test(code)) return 'hexagon';
+  if (new RegExp(escaped + '\\{').test(code)) return 'diamond';
+  if (new RegExp(escaped + '\\[\\/.*\\\\\\/\\]').test(code)) return 'trapezoid';
+  if (new RegExp(escaped + '\\[\\/').test(code)) return 'parallelogram';
+  if (new RegExp(escaped + '>').test(code)) return 'flag';
+  if (new RegExp(escaped + '\\(').test(code)) return 'round';
+  if (new RegExp(escaped + '\\[').test(code)) return 'rect';
+  return 'rect';
+}
+
+function wrapLabel(id, label, shape) {
+  const shapes = {
+    rect: [`[`, `]`],
+    round: [`(`, `)`],
+    stadium: [`([`, `])`],
+    subroutine: [`[[`, `]]`],
+    cylinder: [`[(`, `)]`],
+    circle: [`((`, `))`],
+    diamond: [`{`, `}`],
+    hexagon: [`{{`, `}}`],
+    parallelogram: [`[/`, `/]`],
+    trapezoid: [`[/`, `\\]`],
+    flag: [`>`, `]`],
+  };
+  const [open, close] = shapes[shape] || shapes.rect;
+  return `${id}${open}${label}${close}`;
+}
+
+function updateNodeLabel() {
+  if (!selectedNode) return;
+  const newLabel = document.getElementById('nodeLabel').value;
+  const shape = document.getElementById('nodeShape').value;
+  replaceNodeInCode(selectedNode, newLabel, shape);
+  renderDiagram();
+}
+
+function updateNodeShape() {
+  if (!selectedNode) return;
+  const label = document.getElementById('nodeLabel').value;
+  const shape = document.getElementById('nodeShape').value;
+  replaceNodeInCode(selectedNode, label, shape);
+  renderDiagram();
+}
+
+function replaceNodeInCode(nodeId, label, shape) {
+  const code = editor.value;
+  const escaped = nodeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Match node with any shape brackets
+  const regex = new RegExp(
+    escaped + '(\\[\\[.*?\\]\\]|\\[\\(.*?\\)\\]|\\(\\[.*?\\]\\)|\\(\\(.*?\\)\\)|\\{\\{.*?\\}\\}|\\{.*?\\}|\\[\\/.*?\\\\\\/\\]|\\[\\/.*?\\/\\]|>.*?\\]|\\(.*?\\)|\\[".*?"\\]|\\[.*?\\])',
+    'g'
+  );
+  const replacement = wrapLabel(nodeId, label, shape);
+
+  if (regex.test(code)) {
+    editor.value = code.replace(regex, replacement);
+  }
+}
+
+function updateNodeStyle() {
+  if (!selectedNode) return;
+  const fill = document.getElementById('nodeFill').value;
+  const stroke = document.getElementById('nodeStroke').value;
+  const color = document.getElementById('nodeTextColor').value;
+
+  nodeStyles[selectedNode] = { fill, stroke, color };
+
+  // Sync text inputs
+  document.getElementById('nodeFillText').value = fill;
+  document.getElementById('nodeStrokeText').value = stroke;
+  document.getElementById('nodeTextColorText').value = color;
+
+  renderDiagram();
+}
+
+function applyPresetColor(fill, stroke) {
+  if (!selectedNode) {
+    showToast('Select a node first');
+    return;
+  }
+  document.getElementById('nodeFill').value = fill;
+  document.getElementById('nodeFillText').value = fill;
+  document.getElementById('nodeStroke').value = stroke;
+  document.getElementById('nodeStrokeText').value = stroke;
+  updateNodeStyle();
+}
+
+function updateConnection(index, newType) {
+  const code = editor.value;
+  const lines = code.split('\n');
+  let connIdx = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.match(/([A-Za-z_][\w]*)\s*(-->|---|==>|-\.->|~~>)\s*([A-Za-z_][\w]*)/)) {
+      if (connIdx === index) {
+        lines[i] = lines[i].replace(/(-->|---|==>|-\.->|~~>)/, newType);
+        break;
+      }
+      connIdx++;
+    }
+  }
+  editor.value = lines.join('\n');
+  renderDiagram();
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Theme definitions
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var themeDefinitions = {
+  // Light themes
+  'default': { theme: 'default' },
+  'neutral': { theme: 'neutral' },
+  'ocean': {
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#dbeafe', primaryTextColor: '#1e3a5f',
+      primaryBorderColor: '#3b82f6', lineColor: '#3b82f6',
+      background: '#eff6ff', mainBkg: '#eff6ff',
+      edgeLabelBackground: '#dbeafe', clusterBkg: '#bfdbfe',
+    }
+  },
+  'rose': {
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#fce7f3', primaryTextColor: '#831843',
+      primaryBorderColor: '#ec4899', lineColor: '#ec4899',
+      background: '#fff1f5', mainBkg: '#fff1f5',
+      edgeLabelBackground: '#fce7f3', clusterBkg: '#fbcfe8',
+    }
+  },
+  'sage': {
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#d1fae5', primaryTextColor: '#064e3b',
+      primaryBorderColor: '#10b981', lineColor: '#10b981',
+      background: '#ecfdf5', mainBkg: '#ecfdf5',
+      edgeLabelBackground: '#d1fae5', clusterBkg: '#a7f3d0',
+    }
+  },
+  // Dark themes
+  'dark': { theme: 'dark' },
+  'forest': { theme: 'forest' },
+  'midnight': {
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#1e1b4b', primaryTextColor: '#e0e7ff',
+      primaryBorderColor: '#6366f1', lineColor: '#818cf8',
+      background: '#0f0e1a', mainBkg: '#0f0e1a',
+      edgeLabelBackground: '#1e1b4b', clusterBkg: '#312e81',
+    }
+  },
+  'slate': {
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#334155', primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#64748b', lineColor: '#94a3b8',
+      background: '#0f172a', mainBkg: '#0f172a',
+      edgeLabelBackground: '#334155', clusterBkg: '#1e293b',
+    }
+  },
+  'mocha': {
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#3c2415', primaryTextColor: '#fdf4eb',
+      primaryBorderColor: '#a0522d', lineColor: '#cd853f',
+      background: '#1c0f05', mainBkg: '#1c0f05',
+      edgeLabelBackground: '#3c2415', clusterBkg: '#2c1a0e',
+    }
+  },
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Theme & Direction
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function buildMermaidConfig(themeKey, htmlLabels) {
+  const def = themeDefinitions[themeKey] || { theme: themeKey };
+  const cfg = {
+    startOnLoad: false,
+    theme: def.theme || themeKey,
+    securityLevel: 'loose',
+    flowchart: { curve: 'basis', htmlLabels: htmlLabels !== false },
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  };
+  if (def.themeVariables) cfg.themeVariables = def.themeVariables;
+  return cfg;
+}
+
+function setTheme(themeKey) {
+  currentTheme = themeKey;
+  mermaid.initialize(buildMermaidConfig(themeKey));
+  document.querySelectorAll('.theme-chip').forEach(c => c.classList.toggle('active', c.dataset.theme === themeKey));
+  renderDiagram();
+}
+
+function setDirection(dir) {
+  const code = editor.value;
+  const newCode = code.replace(/^(graph|flowchart)\s+(TD|TB|LR|BT|RL)/m, `$1 ${dir}`);
+  editor.value = newCode;
+  currentDirection = dir;
+  document.querySelectorAll('.direction-chip').forEach(c => c.classList.toggle('active', c.dataset.dir === dir));
+  renderDiagram();
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Zoom & Pan
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function zoomIn() { setZoom(currentZoom + 0.15); }
+function zoomOut() { setZoom(currentZoom - 0.15); }
+
+function resetZoom() {
+  // Fit: measure the SVG's intrinsic size vs. the visible container
+  const container = document.getElementById('previewContainer');
+  const svgEl = preview.querySelector('svg');
+  if (!svgEl) { setZoom(1); return; }
+
+  // Get the SVG's natural dimensions from viewBox or attributes
+  let svgW, svgH;
+  const vb = svgEl.getAttribute('viewBox');
+  if (vb) {
+    const parts = vb.split(/[\s,]+/).map(Number);
+    svgW = parts[2];
+    svgH = parts[3];
+  }
+  if (!svgW) svgW = parseFloat(svgEl.getAttribute('width')) || svgEl.getBoundingClientRect().width / currentZoom;
+  if (!svgH) svgH = parseFloat(svgEl.getAttribute('height')) || svgEl.getBoundingClientRect().height / currentZoom;
+
+  // Available space (subtract padding)
+  const pad = 40;
+  const availW = container.clientWidth - pad * 2;
+  const availH = container.clientHeight - pad * 2;
+
+  if (svgW <= 0 || svgH <= 0 || availW <= 0 || availH <= 0) { panX = 0; panY = 0; setZoom(1); return; }
+
+  const scaleToFit = Math.min(availW / svgW, availH / svgH);
+  // Don't zoom in beyond 100% — only shrink to fit if needed
+  panX = 0; panY = 0;
+  setZoom(Math.min(scaleToFit, 1));
+}
+
+function setZoom(z) {
+  currentZoom = Math.max(0.05, Math.min(5, z));
+  applyTransform();
+  document.getElementById('zoomLabel').textContent = Math.round(currentZoom * 100) + '%';
+}
+
+function applyTransform() {
+  preview.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
+}
+
+// Mouse wheel zoom
+document.getElementById('previewContainer').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  setZoom(currentZoom + (e.deltaY > 0 ? -0.08 : 0.08));
+}, { passive: false });
+
+// Drag to pan
+(function() {
+  const container = document.getElementById('previewContainer');
+  let isPanning = false, startX = 0, startY = 0, startPanX = 0, startPanY = 0;
+
+  container.addEventListener('mousedown', (e) => {
+    // Only pan with left button; ignore clicks on SVG nodes (they have their own handler)
+    if (e.button !== 0) return;
+    if (e.target.closest('.node')) return;
+    isPanning = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startPanX = panX;
+    startPanY = panY;
+    container.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    panX = startPanX + (e.clientX - startX);
+    panY = startPanY + (e.clientY - startY);
+    applyTransform();
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!isPanning) return;
+    isPanning = false;
+    container.style.cursor = '';
+  });
+})();
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Panel resize
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const resizeHandle = document.getElementById('resizeHandle');
+const editorPanel = document.getElementById('editorPanel');
+let isResizing = false;
+
+resizeHandle.addEventListener('mousedown', (e) => {
+  isResizing = true;
+  resizeHandle.classList.add('active');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isResizing) return;
+  const newWidth = Math.max(280, Math.min(600, e.clientX));
+  editorPanel.style.width = newWidth + 'px';
+});
+
+document.addEventListener('mouseup', () => {
+  if (isResizing) {
+    isResizing = false;
+    resizeHandle.classList.remove('active');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Tabs
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Templates
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var templates = {
+  blank: `flowchart TD\n    A[Start] --> B[End]`,
+  simple: `flowchart TD
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Process A]
+    B -->|No| D[Process B]
+    C --> E[Result]
+    D --> E
+    E --> F[End]`,
+  decision: `flowchart TD
+    Q1{Is it urgent?}
+    Q1 -->|Yes| Q2{Is it important?}
+    Q1 -->|No| Q3{Is it important?}
+    Q2 -->|Yes| A1[Do it now]
+    Q2 -->|No| A2[Delegate it]
+    Q3 -->|Yes| A3[Schedule it]
+    Q3 -->|No| A4[Eliminate it]`,
+  process: `flowchart LR
+    REQ[Request Received] --> REV[Review Request]
+    REV --> VAL{Valid?}
+    VAL -->|Yes| PROC[Process Request]
+    VAL -->|No| REJ[Reject & Notify]
+    PROC --> QA[Quality Check]
+    QA --> PASS{Pass?}
+    PASS -->|Yes| SHIP[Ship / Deploy]
+    PASS -->|No| FIX[Fix Issues]
+    FIX --> QA
+    SHIP --> DONE[Complete]`,
+  cicd: `flowchart LR
+    DEV[Developer Push] --> BUILD[Build]
+    BUILD --> TEST[Run Tests]
+    TEST --> PASS{Tests Pass?}
+    PASS -->|Yes| STAGE[Deploy Staging]
+    PASS -->|No| FIX[Fix & Retry]
+    FIX --> BUILD
+    STAGE --> REVIEW[Code Review]
+    REVIEW --> APPROVE{Approved?}
+    APPROVE -->|Yes| PROD[Deploy Production]
+    APPROVE -->|No| FIX
+    PROD --> MONITOR[Monitor]`,
+  userflow: `flowchart TD
+    LAND[Landing Page] --> CTA[Click Sign Up]
+    CTA --> REG[Registration Form]
+    REG --> VERIFY[Email Verification]
+    VERIFY --> ONBOARD[Onboarding Flow]
+    ONBOARD --> DASH[Dashboard]
+    DASH --> EXPLORE[Explore Features]
+    EXPLORE --> UPGRADE{Upgrade?}
+    UPGRADE -->|Yes| PAY[Payment]
+    UPGRADE -->|No| FREE[Continue Free]
+    PAY --> PREMIUM[Premium Dashboard]
+    FREE --> DASH`,
+  architecture: `flowchart TD
+    CLIENT[Client App] --> LB[Load Balancer]
+    LB --> API1[API Server 1]
+    LB --> API2[API Server 2]
+    API1 --> CACHE[(Redis Cache)]
+    API2 --> CACHE
+    API1 --> DB[(PostgreSQL)]
+    API2 --> DB
+    API1 --> QUEUE[Message Queue]
+    QUEUE --> WORKER[Background Workers]
+    WORKER --> DB
+    WORKER --> S3[(Object Storage)]`
+};
+
+function loadTemplate(name) {
+  nodeStyles = {};
+  selectedNode = null;
+  document.getElementById('nodePropsSection').style.display = 'none';
+  editor.value = templates[name] || templates.blank;
+
+  // Update direction chip
+  const dirMatch = editor.value.match(/^(graph|flowchart)\s+(TD|TB|LR|BT|RL)/m);
+  if (dirMatch) {
+    currentDirection = dirMatch[2];
+    document.querySelectorAll('.direction-chip').forEach(c =>
+      c.classList.toggle('active', c.dataset.dir === currentDirection));
+  }
+
+  renderDiagram();
+  switchTab('nodes');
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Format code
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function formatCode() {
+  const lines = editor.value.split('\n');
+  const formatted = lines.map((line, i) => {
+    const trimmed = line.trim();
+    if (i === 0) return trimmed; // graph/flowchart header
+    if (!trimmed) return '';
+    if (trimmed.startsWith('%%')) return '    ' + trimmed;
+    return '    ' + trimmed;
+  });
+  editor.value = formatted.join('\n');
+  renderDiagram();
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Export
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function openExportModal() { document.getElementById('exportModal').classList.add('show'); }
+function closeExportModal() { document.getElementById('exportModal').classList.remove('show'); }
+
+// Click outside modal to close
+document.getElementById('exportModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('exportModal')) closeExportModal();
+});
+
+// ── High-quality export pipeline ──
+// Strategy:
+//   1. Re-render mermaid with htmlLabels:false (no <foreignObject> = canvas-safe)
+//   2. Insert SVG into DOM offscreen to get true pixel bounding box via getBBox/getBoundingClientRect
+//   3. Rebuild a self-contained SVG with explicit pixel viewBox, embedded fonts & white bg
+//   4. For PNG: render to an oversized canvas at the requested DPI scale
+//   5. For PDF: use mm-based A-series page with the image fitted inside margins
+//   6. For SVG: deliver the clean self-contained SVG directly
+
+var EXPORT_PADDING = 40; // px padding around diagram content
+
+async function getExportSvg() {
+  const code = editor.value.trim();
+  if (!code) return null;
+
+  // ── 1. Re-render with htmlLabels OFF (no foreignObject) ──
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: currentTheme,
+    securityLevel: 'loose',
+    flowchart: { curve: 'basis', htmlLabels: false, useMaxWidth: false },
+    fontFamily: 'Arial, Helvetica, sans-serif'
+  });
+
+  const exportId = 'mermaid-export-' + (++renderCounter);
+  let svgMarkup;
+  try {
+    const finalCode = injectStyles(code);
+    const result = await mermaid.render(exportId, finalCode);
+    svgMarkup = result.svg;
+  } catch (err) {
+    console.error('Export render failed:', err);
+    restoreLiveConfig();
+    return null;
+  }
+
+  // ── 2. Measure the real bounding box by inserting into DOM ──
+  const measurer = document.createElement('div');
+  measurer.style.cssText = 'position:fixed;top:-99999px;left:-99999px;visibility:hidden;pointer-events:none;';
+  measurer.innerHTML = svgMarkup;
+  document.body.appendChild(measurer);
+
+  const svgEl = measurer.querySelector('svg');
+  if (!svgEl) { document.body.removeChild(measurer); restoreLiveConfig(); return null; }
+
+  // Remove any max-width / width:100% that mermaid adds — we need intrinsic size
+  svgEl.style.maxWidth = 'none';
+  svgEl.style.width = 'auto';
+  svgEl.style.height = 'auto';
+  svgEl.removeAttribute('width');
+  svgEl.removeAttribute('height');
+
+  // Force layout reflow so getBBox works
+  void svgEl.getBoundingClientRect();
+  let bbox;
+  try {
+    bbox = svgEl.getBBox();
+  } catch (e) {
+    // Fallback: parse viewBox
+    const vb = svgEl.getAttribute('viewBox');
+    if (vb) {
+      const p = vb.split(/[\s,]+/).map(Number);
+      bbox = { x: p[0] || 0, y: p[1] || 0, width: p[2] || 800, height: p[3] || 600 };
+    } else {
+      bbox = { x: 0, y: 0, width: 800, height: 600 };
+    }
+  }
+
+  document.body.removeChild(measurer);
+
+  // ── 3. Build a clean self-contained SVG ──
+  const pad = EXPORT_PADDING;
+  const contentW = bbox.width;
+  const contentH = bbox.height;
+  const totalW = contentW + pad * 2;
+  const totalH = contentH + pad * 2;
+
+  // Parse original SVG to clone it
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgMarkup, 'image/svg+xml');
+  const rootSvg = doc.querySelector('svg');
+  if (!rootSvg) { restoreLiveConfig(); return null; }
+
+  // Set tight viewBox with padding, and explicit width/height in px
+  rootSvg.setAttribute('viewBox', `${bbox.x - pad} ${bbox.y - pad} ${totalW} ${totalH}`);
+  rootSvg.setAttribute('width', totalW);
+  rootSvg.setAttribute('height', totalH);
+  rootSvg.removeAttribute('style'); // strip mermaid's max-width style
+  rootSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  rootSvg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+
+  // Insert white background rect
+  const bgRect = doc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bgRect.setAttribute('x', bbox.x - pad);
+  bgRect.setAttribute('y', bbox.y - pad);
+  bgRect.setAttribute('width', totalW);
+  bgRect.setAttribute('height', totalH);
+  bgRect.setAttribute('fill', '#ffffff');
+  rootSvg.insertBefore(bgRect, rootSvg.firstChild);
+
+  // Embed font declaration so text renders identically everywhere
+  const styleEl = doc.createElementNS('http://www.w3.org/2000/svg', 'style');
+  styleEl.textContent = `
+    text, tspan, .nodeLabel, .edgeLabel, .label {
+      font-family: Arial, Helvetica, sans-serif !important;
+    }
+  `;
+  rootSvg.insertBefore(styleEl, rootSvg.firstChild);
+
+  const serializer = new XMLSerializer();
+  const svgString = '<?xml version="1.0" encoding="UTF-8"?>\n' + serializer.serializeToString(rootSvg);
+
+  restoreLiveConfig();
+  return { svgString, width: totalW, height: totalH };
+}
+
+function restoreLiveConfig() {
+  mermaid.initialize(buildMermaidConfig(currentTheme));
+}
+
+// Render SVG string to a high-res canvas, returns a Promise<Canvas>
+function svgToCanvas(svgString, width, height, scale) {
+  return new Promise((resolve, reject) => {
+    const canvasW = Math.ceil(width * scale);
+    const canvasH = Math.ceil(height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    const ctx = canvas.getContext('2d');
+
+    // Crisp white background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasW, canvasH);
+
+    // Enable high-quality image interpolation
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvasW, canvasH);
+      resolve(canvas);
+    };
+    img.onerror = () => reject(new Error('Failed to rasterize SVG'));
+
+    // Encode as base64 data URI — avoids all blob/CORS/taint issues
+    const encoded = btoa(unescape(encodeURIComponent(svgString)));
+    img.src = 'data:image/svg+xml;base64,' + encoded;
+  });
+}
+
+async function exportAs(format) {
+  closeExportModal();
+  showToast('Preparing high-quality export...');
+
+  const data = await getExportSvg();
+  if (!data) {
+    showToast('No diagram to export — render your diagram first.');
+    return;
+  }
+
+  const { svgString, width, height } = data;
+
+  // ── SVG ──
+  if (format === 'svg') {
+    downloadFile(svgString, 'diagram.svg', 'image/svg+xml');
+    showToast('SVG exported — full vector quality');
+    return;
+  }
+
+  const scale = parseInt(document.getElementById('exportScale').value) || 2;
+
+  try {
+    const canvas = await svgToCanvas(svgString, width, height, scale);
+
+    // ── PNG ──
+    if (format === 'png') {
+      canvas.toBlob((blob) => {
+        if (!blob) { showToast('PNG export failed'); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'diagram.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        const pxW = Math.ceil(width * scale);
+        const pxH = Math.ceil(height * scale);
+        showToast(`PNG exported — ${pxW}×${pxH}px at ${scale}x`);
+      }, 'image/png');
+    }
+
+    // ── PDF ──
+    if (format === 'pdf') {
+      const { jsPDF } = window.jspdf;
+      // Use mm for professional print output
+      // Convert diagram px to mm at 96 DPI: 1 px = 0.2646 mm
+      const PX_TO_MM = 25.4 / 96;
+      const imgWidthMM = width * scale * PX_TO_MM;
+      const imgHeightMM = height * scale * PX_TO_MM;
+      // Choose page size that fits — at least A4 but expand if needed
+      const marginMM = 10;
+      const pageW = Math.max(210, imgWidthMM + marginMM * 2);
+      const pageH = Math.max(297, imgHeightMM + marginMM * 2);
+      const orientation = pageW > pageH ? 'landscape' : 'portrait';
+      const pdf = new jsPDF({ orientation, unit: 'mm', format: [pageW, pageH] });
+      // Center on page
+      const offX = (pageW - imgWidthMM) / 2;
+      const offY = (pageH - imgHeightMM) / 2;
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      pdf.addImage(imgData, 'PNG', offX, offY, imgWidthMM, imgHeightMM);
+      pdf.save('diagram.pdf');
+      showToast('PDF exported — print-ready quality');
+    }
+  } catch (err) {
+    console.error('Export error:', err);
+    showToast('Export failed: ' + err.message);
+  }
+}
+
+function downloadFile(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Toast notification
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Keyboard shortcuts
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+document.addEventListener('keydown', (e) => {
+  // Ctrl/Cmd + Enter to render
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    renderDiagram();
+  }
+  // Ctrl/Cmd + E to export
+  if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+    e.preventDefault();
+    openExportModal();
+  }
+  // Escape to close modal
+  if (e.key === 'Escape') {
+    closeExportModal();
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Boot — load default template after everything is defined
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+loadTemplate('simple');
+</script>
+</body>
+</html>
