@@ -2,6 +2,8 @@
 
 A browser-based flowchart builder powered by [Mermaid](https://mermaid.js.org/). Write Mermaid syntax in the code editor and get an interactive, styled preview in real time — no installation required.
 
+**[Try it live →](https://colgecen.github.io/inflow/)**
+
 ## Features
 
 ### Editor
